@@ -55,9 +55,15 @@ func ParseQuery(url *url.URL) (qName string, qValue string) {
 func AddChan(k string, v string) {
 	mutex.Lock()
 	defer mutex.Unlock()
-	ch := make(chan string, 3)
-	ch <- v
-	QueryDataMap[k] = ch
+	_, ok := QueryDataMap[k]
+	if !ok {
+		ch := make(chan string, 3)
+		ch <- v
+		QueryDataMap[k] = ch
+	} else {
+		QueryDataMap[k] <- v
+	}
+
 }
 
 func ReadChan(k string) (chan string, bool) {

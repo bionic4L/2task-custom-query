@@ -1,0 +1,31 @@
+curl -XPUT http://localhost:8080/color?v=1
+
+curl -XPUT http://localhost:8080/color?v=2
+
+curl -XPUT http://localhost:8080/color?v=3
+
+curl -XPUT http://localhost:8080/name?v=1
+
+curl -XPUT http://localhost:8080/name?v=2
+
+curl -XPUT http://localhost:8080/name?v=3
+
+curl http://localhost:8080/color
+
+curl http://localhost:8080/name
+
+curl http://localhost:8080/name
+
+curl http://localhost:8080/color
+
+curl http://localhost:8080/name
+
+curl http://localhost:8080/color
+
+curl http://localhost:8080/color
+
+curl http://localhost:8080/name
+
+curl http://localhost:8080/name
+
+
