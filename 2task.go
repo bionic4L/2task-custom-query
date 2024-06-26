@@ -1,12 +1,12 @@
 package main
 
 import (
-	"container/list"
 	"flag"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
+	"sync"
 )
 
 type QueryData struct {
@@ -14,10 +14,10 @@ type QueryData struct {
 	paramV string
 }
 
-var queryDataList *list.List
+var QueryDataMap = make(map[string](chan string))
+var mutex = &sync.Mutex{}
 
 func main() {
-	queryDataList = list.New()
 
 	portFlag := flag.String(
 		"port",
@@ -45,14 +45,6 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func Push(elem interface{}, queue *list.List) {
-	queue.PushBack(elem)
-}
-
-func Pop(queue *list.List) interface{} {
-	return queue.Remove(queue.Front())
-}
-
 func ParseQuery(url *url.URL) (qName string, qValue string) {
 	parsedName := url.Path[1:]
 	parsedParamValue := url.Query().Get("v")
@@ -60,61 +52,48 @@ func ParseQuery(url *url.URL) (qName string, qValue string) {
 	return parsedName, parsedParamValue
 }
 
-func handlePUT(w http.ResponseWriter, r *http.Request) {
-	// w.Write([]byte("This is PUT request\n")) //for temp check
+func AddChan(k string, v string) {
+	mutex.Lock()
+	defer mutex.Unlock()
+	ch := make(chan string, 3)
+	ch <- v
+	QueryDataMap[k] = ch
+}
 
+func ReadChan(k string) (chan string, bool) {
+	mutex.Lock()
+	defer mutex.Unlock()
+	ch, ok := QueryDataMap[k]
+	return ch, ok
+}
+
+func handlePUT(w http.ResponseWriter, r *http.Request) {
 	statusBadReq := "\nStatus code: " + strconv.Itoa(http.StatusBadRequest) + " Bad Request\n"
 	statusOK := "\nStatus code: " + strconv.Itoa(http.StatusOK) + " OK\n"
 
 	urlRaw := r.URL
 	queryName, paramValue := ParseQuery(urlRaw)
-	// w.Write([]byte("Query name:"))    //for temp check
-	// w.Write([]byte(queryName))        //for temp check
-	// w.Write([]byte("\nParam value:")) //for temp check
-	// w.Write([]byte(paramValue))       //for temp check
-
-	queryDataUnit := &QueryData{
-		name:   queryName,
-		paramV: paramValue,
-	}
 
 	if paramValue == "" {
 		w.Write([]byte(statusBadReq))
 	} else {
-		Push(*queryDataUnit, queryDataList)
-		// fmt.Println("In list:")                                  //for temp check
-		// for e := queryDataList.Front(); e != nil; e = e.Next() { //for temp check
-		// 	fmt.Println(e.Value) //for temp check
-		// } //for temp check
+		AddChan(queryName, paramValue)
 		w.Write([]byte(statusOK))
 	}
 }
-
 func handleGET(w http.ResponseWriter, r *http.Request) {
-	// w.Write([]byte("This is GET request\n")) //for temp check
-
 	statusNotFound := "\nStatus code: " + strconv.Itoa(http.StatusNotFound) + " Not Found\n"
-	if queryDataList.Front() != nil {
-		firstElem := queryDataList.Front().Value.(QueryData)
-		qNameHave := firstElem.name
-		qValueHave := firstElem.paramV
 
-		urlRaw := r.URL
+	urlRaw := r.URL
+	incomeQueryName, _ := ParseQuery(urlRaw)
 
-		incomeQueryName, _ := ParseQuery(urlRaw)
+	ch, ok := ReadChan(incomeQueryName)
 
-		if qNameHave == incomeQueryName {
-			w.Write([]byte(qValueHave))
-			Pop(queryDataList)
-		} else {
-			w.Write([]byte(statusNotFound))
-		}
-
-		// fmt.Println("Front elem: ", firstElem)   //for temp check
-		// fmt.Println("Name: ", qNameHave)         //for temp check
-		// fmt.Println("Param value: ", qValueHave) //for temp check
-	} else {
+	if !ok {
 		w.Write([]byte(statusNotFound))
+	} else {
+		recievedStr := <-ch
+		w.Write([]byte(recievedStr))
 	}
 
 }
