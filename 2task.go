@@ -5,17 +5,17 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"sync"
 )
 
-type QueryData struct {
-	name   string
-	paramV string
+type Query struct {
+	sync.RWMutex
+	QueryDataMap map[string](chan string)
 }
 
-var QueryDataMap = make(map[string](chan string))
-var mutex = &sync.Mutex{}
+var q = &Query{
+	QueryDataMap: make(map[string](chan string)),
+}
 
 func main() {
 
@@ -53,29 +53,32 @@ func ParseQuery(url *url.URL) (qName string, qValue string) {
 }
 
 func AddChan(k string, v string) {
-	mutex.Lock()
-	defer mutex.Unlock()
-	_, ok := QueryDataMap[k]
+	queryMap := q.QueryDataMap
+	defer q.Unlock()
+	_, ok := queryMap[k]
 	if !ok {
+		q.Lock()
 		ch := make(chan string, 3)
 		ch <- v
-		QueryDataMap[k] = ch
+		queryMap[k] = ch
 	} else {
-		QueryDataMap[k] <- v
+		q.Lock()
+		queryMap[k] <- v
 	}
 
 }
 
 func ReadChan(k string) (chan string, bool) {
-	mutex.Lock()
-	defer mutex.Unlock()
-	ch, ok := QueryDataMap[k]
+	queryMap := q.QueryDataMap
+
+	ch, ok := queryMap[k]
+
 	return ch, ok
 }
 
 func handlePUT(w http.ResponseWriter, r *http.Request) {
-	statusBadReq := "\nStatus code: " + strconv.Itoa(http.StatusBadRequest) + " Bad Request\n"
-	statusOK := "\nStatus code: " + strconv.Itoa(http.StatusOK) + " OK\n"
+	statusBadReq := fmt.Sprintf("\nStatus code: %v Bad Request\n", http.StatusBadRequest)
+	statusOK := fmt.Sprintf("\nStatus code: %v OK\n", http.StatusOK)
 
 	urlRaw := r.URL
 	queryName, paramValue := ParseQuery(urlRaw)
@@ -88,7 +91,7 @@ func handlePUT(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func handleGET(w http.ResponseWriter, r *http.Request) {
-	statusNotFound := "\nStatus code: " + strconv.Itoa(http.StatusNotFound) + " Not Found\n"
+	statusNotFound := fmt.Sprintf("\nStatus code: %v Not Found\n", http.StatusNotFound)
 
 	urlRaw := r.URL
 	incomeQueryName, _ := ParseQuery(urlRaw)
