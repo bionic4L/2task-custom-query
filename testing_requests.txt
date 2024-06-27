@@ -29,3 +29,16 @@ curl http://localhost:8080/name
 curl http://localhost:8080/name
 
 
+
+curl http://localhost:8080/color
+
+curl http://localhost:8080/color
+
+curl http://localhost:8080/color
+
+curl http://localhost:8080/name
+
+curl http://localhost:8080/name
+
+curl http://localhost:8080/name
+

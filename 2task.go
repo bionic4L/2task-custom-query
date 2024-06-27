@@ -17,6 +17,10 @@ var q = &Query{
 	QueryDataMap: make(map[string](chan string)),
 }
 
+var statusBadReq = fmt.Sprintf("\nStatus code: %v Bad Request\n", http.StatusBadRequest)
+var statusOK = fmt.Sprintf("\nStatus code: %v OK\n", http.StatusOK)
+var statusNotFound = fmt.Sprintf("\nStatus code: %v Not Found\n", http.StatusNotFound)
+
 func main() {
 
 	portFlag := flag.String(
@@ -69,16 +73,16 @@ func AddChan(k string, v string) {
 }
 
 func ReadChan(k string) (chan string, bool) {
+	q.RLock()
 	queryMap := q.QueryDataMap
 
 	ch, ok := queryMap[k]
+	q.RUnlock()
 
 	return ch, ok
 }
 
 func handlePUT(w http.ResponseWriter, r *http.Request) {
-	statusBadReq := fmt.Sprintf("\nStatus code: %v Bad Request\n", http.StatusBadRequest)
-	statusOK := fmt.Sprintf("\nStatus code: %v OK\n", http.StatusOK)
 
 	urlRaw := r.URL
 	queryName, paramValue := ParseQuery(urlRaw)
@@ -91,8 +95,6 @@ func handlePUT(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func handleGET(w http.ResponseWriter, r *http.Request) {
-	statusNotFound := fmt.Sprintf("\nStatus code: %v Not Found\n", http.StatusNotFound)
-
 	urlRaw := r.URL
 	incomeQueryName, _ := ParseQuery(urlRaw)
 
@@ -102,6 +104,9 @@ func handleGET(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(statusNotFound))
 	} else {
 		recievedStr := <-ch
+		if recievedStr == "" {
+			w.Write([]byte(statusNotFound))
+		}
 		w.Write([]byte(recievedStr))
 	}
 
