@@ -57,29 +57,28 @@ func ParseQuery(url *url.URL) (qName string, qValue string) {
 }
 
 func AddChan(k string, v string) {
-	queryMap := q.QueryDataMap
-	defer q.Unlock()
-	_, ok := queryMap[k]
+	q.Lock()
+	_, ok := q.QueryDataMap[k]
+
 	if !ok {
-		q.Lock()
 		ch := make(chan string, 3)
 		ch <- v
-		queryMap[k] = ch
+		q.QueryDataMap[k] = ch
+		q.Unlock()
 	} else {
-		q.Lock()
-		queryMap[k] <- v
+		q.QueryDataMap[k] <- v
+		q.Unlock()
 	}
 
 }
 
 func ReadChan(k string) (chan string, bool) {
 	q.RLock()
-	queryMap := q.QueryDataMap
 
-	ch, ok := queryMap[k]
+	ch, ok := q.QueryDataMap[k]
 	q.RUnlock()
-
 	return ch, ok
+
 }
 
 func handlePUT(w http.ResponseWriter, r *http.Request) {
@@ -97,17 +96,13 @@ func handlePUT(w http.ResponseWriter, r *http.Request) {
 func handleGET(w http.ResponseWriter, r *http.Request) {
 	urlRaw := r.URL
 	incomeQueryName, _ := ParseQuery(urlRaw)
+	ch, _ := ReadChan(incomeQueryName)
 
-	ch, ok := ReadChan(incomeQueryName)
-
-	if !ok {
+	select {
+	case rec := <-ch:
+		w.Write([]byte(rec))
+	default:
 		w.Write([]byte(statusNotFound))
-	} else {
-		recievedStr := <-ch
-		if recievedStr == "" {
-			w.Write([]byte(statusNotFound))
-		}
-		w.Write([]byte(recievedStr))
 	}
 
 }
