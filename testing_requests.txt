@@ -30,15 +30,8 @@ curl http://localhost:8080/name
 
 
 
-curl http://localhost:8080/color
+curl http://localhost:8080/color?timeout=5
 
-curl http://localhost:8080/color
+curl http://localhost:8080/color?timeout=3
 
-curl http://localhost:8080/color
-
-curl http://localhost:8080/name
-
-curl http://localhost:8080/name
-
-curl http://localhost:8080/name
 

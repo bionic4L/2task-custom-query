@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
+	"time"
 )
 
 type Query struct {
@@ -17,12 +21,13 @@ var q = &Query{
 	QueryDataMap: make(map[string](chan string)),
 }
 
-var statusBadReq = fmt.Sprintf("\nStatus code: %v Bad Request\n", http.StatusBadRequest)
-var statusOK = fmt.Sprintf("\nStatus code: %v OK\n", http.StatusOK)
-var statusNotFound = fmt.Sprintf("\nStatus code: %v Not Found\n", http.StatusNotFound)
+var (
+	statusBadReq   = fmt.Sprintf("\nStatus code: %v Bad Request\n", http.StatusBadRequest)
+	statusOK       = fmt.Sprintf("\nStatus code: %v OK\n", http.StatusOK)
+	statusNotFound = fmt.Sprintf("\nStatus code: %v Not Found\n", http.StatusNotFound)
+)
 
 func main() {
-
 	portFlag := flag.String(
 		"port",
 		":8080", //default value if extra flag not specified
@@ -32,10 +37,7 @@ func main() {
 
 	http.HandleFunc("/", handleRequest)
 
-	err := http.ListenAndServe(*portFlag, nil)
-	if err != nil {
-		err = fmt.Errorf("Can't start server. Error: %v", err)
-	}
+	log.Fatal(http.ListenAndServe(*portFlag, nil))
 }
 
 func handleRequest(w http.ResponseWriter, r *http.Request) {
@@ -50,59 +52,65 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func ParseQuery(url *url.URL) (qName string, qValue string) {
-	parsedName := url.Path[1:]
-	parsedParamValue := url.Query().Get("v")
 
-	return parsedName, parsedParamValue
+	return url.Path[1:], url.Query().Get("v")
 }
 
 func AddChan(k string, v string) {
 	q.Lock()
+	defer q.Unlock()
+
 	_, ok := q.QueryDataMap[k]
 
-	if !ok {
-		ch := make(chan string, 3)
-		ch <- v
-		q.QueryDataMap[k] = ch
-		q.Unlock()
-	} else {
+	if ok {
 		q.QueryDataMap[k] <- v
-		q.Unlock()
+		return
 	}
+
+	ch := make(chan string, 3)
+	ch <- v
+	q.QueryDataMap[k] = ch
 
 }
 
-func ReadChan(k string) (chan string, bool) {
+func ReadChan(ctx context.Context, k string) (chan string, bool) {
 	q.RLock()
-
+	defer q.RUnlock()
+	time.Sleep(5 * time.Second)
 	ch, ok := q.QueryDataMap[k]
-	q.RUnlock()
+
 	return ch, ok
 
 }
 
 func handlePUT(w http.ResponseWriter, r *http.Request) {
-
 	urlRaw := r.URL
 	queryName, paramValue := ParseQuery(urlRaw)
 
 	if paramValue == "" {
 		w.Write([]byte(statusBadReq))
-	} else {
-		AddChan(queryName, paramValue)
-		w.Write([]byte(statusOK))
+		return
 	}
+
+	AddChan(queryName, paramValue)
+	w.Write([]byte(statusOK))
 }
 func handleGET(w http.ResponseWriter, r *http.Request) {
 	urlRaw := r.URL
+	n, _ := strconv.Atoi(urlRaw.Query().Get("timeout"))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(n)*time.Second)
+	defer cancel()
+
 	incomeQueryName, _ := ParseQuery(urlRaw)
-	ch, _ := ReadChan(incomeQueryName)
+
+	ch, _ := ReadChan(ctx, incomeQueryName)
 
 	select {
+	case <-ctx.Done():
+		w.Write([]byte(statusNotFound))
+
 	case rec := <-ch:
 		w.Write([]byte(rec))
-	default:
-		w.Write([]byte(statusNotFound))
 	}
 
 }
